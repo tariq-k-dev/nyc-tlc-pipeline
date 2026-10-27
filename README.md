@@ -4,22 +4,22 @@ End-to-end ELT on NYC yellow-taxi data: **in-place Parquet ingestion → dbt sta
 intermediate → marts**, with data tests, a snapshot, an enforced data contract, and
 CI that runs the whole thing on every push.
 
-[![dbt build](https://github.com/tariq-k-dev/nyc-tlc-analytics-engineering/actions/workflows/dbt_ci.yml/badge.svg)](https://github.com/tariq-k-dev/nyc-tlc-analytics-engineering/actions/workflows/dbt_ci.yml)
+[![dbt build](https://github.com/tariq-k-dev/nyc-tlc-pipeline/actions/workflows/dbt_ci.yml/badge.svg)](https://github.com/tariq-k-dev/nyc-tlc-pipeline/actions)
 
 ## Why this exists
 
 I wanted a project where the engineering decisions are defensible, not decorative.
 Every choice below is one I can walk through in an interview:
 
-| Decision | Choice | Why not the alternative |
-|---|---|---|
-| Warehouse | **DuckDB** (embedded, file-based) | Snowflake/BigQuery cost money and expire on a trial clock. DuckDB needs no account, and the adapter surface is identical enough that porting is a `profiles.yml` change. |
-| Ingestion | **Read Parquet in place** from CloudFront | No COPY/load step to maintain or re-run, and DuckDB pushes filters into the remote file — a month of trips aggregates in ~2 s. Real ELT starts at the transformation layer; copying first would have been decorating a tutorial. |
-| Trip key | **Hash of the full business row** | A narrower hash (vendor + timestamps + zones + amount) collided on ~1 row per 3.3M in the January file. Hashing every measure makes the key unique by construction. |
-| Incremental strategy | **merge** on `trip_sk`, 3-day lookback | `append` is cheaper but silently duplicates any corrected trip, and TLC republishes months. The lookback catches late-arriving records (a February file contains January pickups). |
-| Date dimension | **Generated spine** | Without it, a line chart silently drops zero-trip days and reads as a trend that isn't there. |
-| Snapshot | **SCD2 on `dim_zones`** | TLC renames and re-buckets zones; without a snapshot, "which zone was this trip in at the time" is lost on every refresh. |
-| Contract | **Enforced on `fct_trips`** | Adding a column to the model without declaring its type fails the build — which is the point. |
+| Decision             | Choice                                    | Why not the alternative                                                                                                                                                                                                          |
+| -------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Warehouse            | **DuckDB** (embedded, file-based)         | Snowflake/BigQuery cost money and expire on a trial clock. DuckDB needs no account, and the adapter surface is identical enough that porting is a `profiles.yml` change.                                                         |
+| Ingestion            | **Read Parquet in place** from CloudFront | No COPY/load step to maintain or re-run, and DuckDB pushes filters into the remote file — a month of trips aggregates in ~2 s. Real ELT starts at the transformation layer; copying first would have been decorating a tutorial. |
+| Trip key             | **Hash of the full business row**         | A narrower hash (vendor + timestamps + zones + amount) collided on ~1 row per 3.3M in the January file. Hashing every measure makes the key unique by construction.                                                              |
+| Incremental strategy | **merge** on `trip_sk`, 3-day lookback    | `append` is cheaper but silently duplicates any corrected trip, and TLC republishes months. The lookback catches late-arriving records (a February file contains January pickups).                                               |
+| Date dimension       | **Generated spine**                       | Without it, a line chart silently drops zero-trip days and reads as a trend that isn't there.                                                                                                                                    |
+| Snapshot             | **SCD2 on `dim_zones`**                   | TLC renames and re-buckets zones; without a snapshot, "which zone was this trip in at the time" is lost on every refresh.                                                                                                        |
+| Contract             | **Enforced on `fct_trips`**               | Adding a column to the model without declaring its type fails the build — which is the point.                                                                                                                                    |
 
 ## Lineage
 
@@ -53,17 +53,17 @@ yellow_tripdata_*.parquet  (public, CloudFront)
 
 **1. A single city-wide average is meaningless.** Average trips per borough-day:
 
-| Borough | Avg trips/day | % paid by card | Avg tip rate (all) | Avg tip rate (card only) | Avg fare |
-|---|---|---|---|---|---|
-| Manhattan | 92,808 | 73.9% | 20.6% | 26.8% | $22.36 |
-| Queens | 8,780 | 72.1% | 15.5% | 21.1% | $72.05 |
-| Brooklyn | 1,946 | 36.2% | 3.1% | 6.2% | $27.70 |
-| Bronx | — | 40.6% | 0.6% | 1.2% | $32.46 |
+| Borough   | Avg trips/day | % paid by card | Avg tip rate (all) | Avg tip rate (card only) | Avg fare |
+| --------- | ------------- | -------------- | ------------------ | ------------------------ | -------- |
+| Manhattan | 92,808        | 73.9%          | 20.6%              | 26.8%                    | $22.36   |
+| Queens    | 8,780         | 72.1%          | 15.5%              | 21.1%                    | $72.05   |
+| Brooklyn  | 1,946         | 36.2%          | 3.1%               | 6.2%                     | $27.70   |
+| Bronx     | —             | 40.6%          | 0.6%               | 1.2%                     | $32.46   |
 
 **2. The "Brooklyn tips 3% vs Manhattan 21%" headline is mostly a measurement artefact.**
 The taximeter only records tips on card payments — cash tips are invisible to the
 data. Card share in Brooklyn is 36% versus 74% in Manhattan, so most of the gap is
-*how the trip was paid for*, not generosity. Restricting to card trips narrows it from
+_how the trip was paid for_, not generosity. Restricting to card trips narrows it from
 a 6.8× gap to 4.3×, and even that residual is likely trip-mix (Brooklyn card trips are
 shorter and more local). This is the analysis I'd actually present: a naive average
 here gets repeated in a meeting and is wrong.
@@ -76,7 +76,7 @@ honest summary statistic; this is why `avg_fare_usd` in the mart is labelled as 
 **4. Outliers are bounded, not deleted.** 0.005% of rows exceed 100 miles and 13 rows
 had meter durations over 24 hours (worst: 5,626 minutes for a 6.5-mile trip — a meter
 left running). Those 13 are dropped; the distance tail is kept and policed by a
-*rate-based* test, because deleting every outlier also deletes real long-haul trips.
+_rate-based_ test, because deleting every outlier also deletes real long-haul trips.
 
 ## Run it
 
