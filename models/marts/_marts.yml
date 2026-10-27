@@ -1,0 +1,118 @@
+version: 2
+
+models:
+  - name: fct_trips
+    description: >
+      Grain: one row per completed yellow-taxi trip. Incremental merge on `trip_sk`
+      with a 3-day lookback so late-arriving records (a February file containing
+      January pickups) are not silently dropped. A `contract` is enforced, which
+      means every column below is declared with an explicit type — adding a column to
+      the model without updating this file fails the build on purpose.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: trip_sk
+        description: Surrogate key hashed from the full business row.
+        data_type: varchar
+        tests: [unique, not_null]
+      - name: trip_date
+        description: Local date of meter engagement. Cluster key for the merge.
+        data_type: date
+        tests: [not_null]
+      - name: pickup_at
+        data_type: timestamp
+        tests: [not_null]
+      - name: dropoff_at
+        data_type: timestamp
+        tests: [not_null]
+      - name: vendor_id
+        description: TPEP provider (1 = Creative Mobile, 2 = Verifone).
+        data_type: integer
+      - name: pickup_zone_id
+        data_type: integer
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_zones')
+                field: zone_id
+      - name: pickup_borough
+        data_type: varchar
+      - name: pickup_zone
+        data_type: varchar
+      - name: dropoff_zone_id
+        data_type: integer
+      - name: dropoff_borough
+        data_type: varchar
+      - name: dropoff_zone
+        data_type: varchar
+      - name: passenger_count
+        data_type: integer
+      - name: trip_distance_mi
+        data_type: double
+      - name: trip_duration_min
+        description: Minutes between pickup and dropoff.
+        data_type: double
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1440    # a trip over 24h is a meter error, not a trip
+      - name: fare_amount_usd
+        data_type: double
+      - name: tip_amount_usd
+        description: Recorded by the meter — cash tips are not captured.
+        data_type: double
+      - name: tolls_amount_usd
+        data_type: double
+      - name: total_amount_usd
+        data_type: double
+        tests: [not_null]
+      - name: tip_rate
+        description: tip_amount / fare_amount. NULL when fare is zero.
+        data_type: double
+      - name: payment_method
+        data_type: varchar
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['credit_card', 'cash', 'no_charge', 'dispute', 'unknown', 'voided', 'other']
+
+  - name: fct_daily_demand
+    description: Daily trip counts and revenue by pickup borough. The BI-facing mart.
+    columns:
+      - name: trip_date
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: pickup_borough
+        tests: [not_null]
+      - name: trips
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: dim_zones
+    description: TLC taxi zone lookup, one row per LocationID (265 zones incl. Unknown).
+    columns:
+      - name: zone_id
+        tests: [unique, not_null]
+      - name: borough
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                # 'N/A' is a real value in TLC's own lookup (zone 264 = Unknown)
+                values: ['EWR', 'Queens', 'Bronx', 'Brooklyn', 'Manhattan', 'Staten Island', 'Unknown', 'N/A']
+
+  - name: dim_date
+    description: Generated daily spine so charts plot zero-trip days instead of dropping them.
+    columns:
+      - name: date_day
+        tests: [unique, not_null]

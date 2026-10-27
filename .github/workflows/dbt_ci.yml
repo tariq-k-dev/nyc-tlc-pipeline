@@ -1,0 +1,47 @@
+name: dbt build
+
+# No secrets required. DuckDB is embedded and the source data is public Parquet,
+# so anyone — including a recruiter — can click the green check and see the
+# pipeline actually ran. That verifiability is the entire point of CI here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: dbt deps
+        run: uv run dbt deps --profiles-dir profiles
+
+      - name: dbt build
+        run: uv run dbt build --profiles-dir profiles
+
+      - name: dbt docs
+        run: uv run dbt docs generate --profiles-dir profiles
+
+      - name: Upload lineage + build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-artifacts
+          path: |
+            target/manifest.json
+            target/catalog.json
+            target/index.html
+            target/run_results.json
+          retention-days: 14

@@ -1,0 +1,20 @@
+# local build output
+*.log
+
+# dbt artifacts
+target/
+# dbt writes an anonymous per-machine tracking id here; not project config.
+profiles/.user.yml
+dbt_packages/
+logs/
+*.duckdb
+*.duckdb.wal
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# os
+.DS_Store
+Thumbs.db

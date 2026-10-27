@@ -1,0 +1,39 @@
+# nyc_tlc — analytics-engineering capstone
+name: 'nyc_tlc'
+version: '1.0.0'
+profile: 'nyc_tlc'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages", "logs"]
+
+vars:
+  # Monthly Parquet files to scan, inclusive. Each month is ~3M yellow-taxi trips.
+  # Start narrow, then widen: '2025-01' .. '2025-06'.
+  start_month: '2025-01'
+  end_month: '2025-01'
+  # Re-scan this many days on every incremental run so late-arriving trips
+  # (a February file containing January pickups) are not silently dropped.
+  incremental_lookback_days: 3
+  # Start of the generated date spine in dim_date.
+  reporting_start_date: '2025-01-01'
+
+models:
+  nyc_tlc:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      +materialized: table
+      +schema: marts
+      fct_trips:
+        +materialized: incremental
+        +unique_key: trip_sk
+        +incremental_strategy: merge
+        +on_schema_change: append_new_columns

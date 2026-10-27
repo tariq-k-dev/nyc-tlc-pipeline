@@ -1,0 +1,16 @@
+# In-repo profiles dir. Always run dbt with --profiles-dir profiles.
+# dbt defaults to ~/.dbt and hard-errors when that directory is absent.
+nyc_tlc:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "dev.duckdb"
+      schema: main
+      threads: 4
+      extensions:
+        - httpfs
+        - parquet
+      settings:
+        # Fail fast rather than hang if CloudFront is slow.
+        http_timeout: 60
