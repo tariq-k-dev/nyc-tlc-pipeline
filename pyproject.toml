@@ -3,6 +3,6 @@ name = "nyc-tlc-analytics-engineering"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "dbt-core>=1.11,<1.12",
+    "dbt-core>=1.12.7,<1.13",
     "dbt-duckdb>=1.11,<1.12",
 ]
